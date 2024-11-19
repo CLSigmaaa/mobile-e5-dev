@@ -11,5 +11,6 @@ data class Recipe(
     var recipeCategory: String,
     val imageUrl: String,
     val cookingInstructions: String,
-    val ingredients: String
+    val ingredientsParts: String,
+    val ingredientsQuantities: String
 )

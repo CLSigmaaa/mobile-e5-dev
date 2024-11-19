@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Application de Recettes</string>
+    <string name="settings">Paramètres</string>
+    <string name="language_settings">Paramètres de langue</string>
+    <string name="switch_to_french">Passer en français</string>
+    <string name="app_settings">Paramètres de l\'application</string>
+    <string name="enable_notifications">Activer les notifications</string>
+    <string name="dark_mode">Mode sombre</string>
+    <string name="app_info">Informations sur l\'application</string>
+    <string name="version">Version %1$s</string>
+    <string name="home">Accueil</string>
+    <string name="search">Rechercher</string>
+    <string name="favorites">Favoris</string>
+    <string name="profile">Profil</string>
+    <string name="popular_recipes">Recettes populaires</string>
+    <string name="categories">Catégories</string>
+    <string name="discover_recipes">Découvrir des recettes</string>
+    <string name="search_recipes">Rechercher des recettes</string>
+</resources>

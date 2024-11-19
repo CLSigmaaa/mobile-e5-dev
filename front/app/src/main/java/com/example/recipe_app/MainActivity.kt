@@ -25,14 +25,19 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -47,6 +52,32 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+enum class NavigationItem(
+    val title: String,
+    val icon: ImageVector,
+    val route: String
+) {
+    HOME("Home", Icons.Filled.Home, "home"),
+    SETTINGS("Settings", Icons.Filled.Settings, "settings")
+}
+
+@Composable
+fun BottomNavigationBar(
+    currentRoute: String,
+    onNavigationSelected: (String) -> Unit
+) {
+    NavigationBar {
+        NavigationItem.values().forEach { item ->
+            NavigationBarItem(
+                icon = { Icon(item.icon, contentDescription = item.title) },
+                label = { Text(item.title) },
+                selected = currentRoute == item.route,
+                onClick = { onNavigationSelected(item.route) }
+            )
+        }
+    }
+}
+
 class MainActivity : ComponentActivity() {
     private lateinit var recipeViewModel: RecipeViewModel
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -54,7 +85,29 @@ class MainActivity : ComponentActivity() {
         initViewModel()
         setContent {
             RecipeappTheme(darkTheme = false) {
-                HomeScreen(recipeViewModel)
+                var currentRoute by remember { mutableStateOf(NavigationItem.HOME.route) }
+
+                Scaffold (
+                    bottomBar = {
+                        BottomNavigationBar(
+                            currentRoute = currentRoute,
+                            onNavigationSelected = { route ->
+                                currentRoute = route
+                            }
+                        )
+                    }
+                ) { padding ->
+                    when (currentRoute) {
+                        NavigationItem.HOME.route -> HomeScreen(
+                            recipeViewModel = recipeViewModel,
+                            modifier = Modifier.padding(padding)
+                        )
+                        NavigationItem.SETTINGS.route -> SettingsScreen(
+                            onBackPressed = { currentRoute = NavigationItem.SETTINGS.route },
+                            modifier = Modifier.padding(padding)
+                        )
+                    }
+                }
             }
         }
     }
@@ -66,7 +119,8 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun HomeScreen(
-    recipeViewModel: RecipeViewModel
+    recipeViewModel: RecipeViewModel,
+    modifier: Modifier = Modifier
 ) {
     val searchQuery = remember { mutableStateOf(TextFieldValue("")) }
 
@@ -79,14 +133,14 @@ fun HomeScreen(
     ) {
 
             Text(
-                text = "Discover Recipes",
+                text = stringResource(id = R.string.discover_recipes),
                 style = MaterialTheme.typography.headlineMedium,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
             SearchBar(searchQuery, recipeViewModel)
 
             Text(
-                text = "Categories",
+                text = stringResource(id = R.string.categories),
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(vertical = 16.dp)
             )
@@ -97,7 +151,7 @@ fun HomeScreen(
 
 
             Text(
-                text = "Popular Recipes",
+                text = stringResource(id = R.string.popular_recipes),
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(vertical = 16.dp)
             )
@@ -135,11 +189,16 @@ fun RecipesList(recipes: List<Recipe>, recipeViewModel: RecipeViewModel) {
         modifier = Modifier.fillMaxSize()
     ) {
         items(recipes.size) { index ->
+            println("Recipe: ${recipes[index].ingredientsParts}")
+
             RecipeCard(
                 recipeTitle = recipes[index].name,
                 recipeImage = recipes[index].imageUrl,
                 starRating = recipes[index].rating.toString(),
                 prepTime = recipes[index].cookTime,
+                ingredientsParts = recipes[index].ingredientsParts,
+                ingredientsQuantities = recipes[index].ingredientsQuantities,
+                cookingInstructions = recipes[index].cookingInstructions
             )
         }
     }
@@ -170,7 +229,7 @@ fun SearchBar(searchQuery: MutableState<TextFieldValue>, recipeViewModel: Recipe
             modifier = Modifier.fillMaxWidth(),
             decorationBox = { innerTextField ->
                 if (searchQuery.value.text.isEmpty()) {
-                    Text(text = "Search recipes...", color = Color.Gray)
+                    Text(text = stringResource(R.string.search_recipes), color = Color.Gray)
                 }
                 innerTextField()
             }
@@ -206,8 +265,10 @@ fun Chip(label: String, onClick: () -> Unit) {
 
 
 @Composable
-fun RecipeCard(recipeTitle: String, recipeImage: String, starRating: String, prepTime: String) {
+fun RecipeCard(recipeTitle: String, recipeImage: String, starRating: String, prepTime: String, ingredientsParts: String, ingredientsQuantities: String, cookingInstructions: String) {
     val context = LocalContext.current
+
+    println("ingredientsParts: $ingredientsParts")
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -218,7 +279,9 @@ fun RecipeCard(recipeTitle: String, recipeImage: String, starRating: String, pre
                     putExtra("recipeImage", recipeImage)
                     putExtra("recipePrepTime", prepTime)
                     putExtra("recipeRating", starRating)
-                    putExtra("recipeSteps", "Cooking instructions here") // Replace with actual steps
+                    putExtra("recipeIngredientsParts", ingredientsParts)
+                    putExtra("recipeIngredientsQuantities", ingredientsQuantities)
+                    putExtra("recipeSteps", cookingInstructions)
                 }
                 context.startActivity(intent)
             }
