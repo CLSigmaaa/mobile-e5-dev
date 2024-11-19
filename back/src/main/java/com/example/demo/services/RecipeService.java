@@ -19,8 +19,8 @@ public class RecipeService {
         this.recipeRepository = recipeRepository;
     }
 
-//    public Page<Recipe> getRecipes(int offset, int limit) {
-//        Pageable pageable = PageRequest.of(offset, limit, Sort.by("id").ascending());
-//        return recipeRepository.findAllRecipes(pageable);
-//    }
+    public Page<Recipe> getRecipes(int offset, int limit) {
+        Pageable pageable = PageRequest.of(offset, limit, Sort.by("id").ascending());
+        return recipeRepository.findAll(pageable);
+    }
 }

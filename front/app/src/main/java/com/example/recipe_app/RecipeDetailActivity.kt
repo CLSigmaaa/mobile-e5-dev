@@ -44,6 +44,7 @@ fun RecipeDetailScreen(name: String, image: String, prepTime: String, rating: St
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .fillMaxWidth()
             .padding(16.dp)
     ) {
         AsyncImage(

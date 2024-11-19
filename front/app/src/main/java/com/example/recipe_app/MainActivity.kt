@@ -23,10 +23,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalContext
@@ -34,111 +36,119 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.ViewModelProvider
 import coil3.compose.AsyncImage
 import com.example.recipe_app.model.Recipe
-import com.example.recipe_app.network.ApiClient
+import com.example.recipe_app.viewmodel.RecipeViewModel
+import com.example.recipe_app.viewmodel.STATE
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    private lateinit var recipeViewModel: RecipeViewModel
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
+        initViewModel()
         setContent {
-            RecipeappTheme {
-                HomeScreen()
+            RecipeappTheme(darkTheme = false) {
+                HomeScreen(recipeViewModel)
             }
         }
+    }
+
+    private fun initViewModel() {
+        recipeViewModel = ViewModelProvider(this@MainActivity)[RecipeViewModel::class.java]
     }
 }
 
 @Composable
-fun HomeScreen() {
+fun HomeScreen(
+    recipeViewModel: RecipeViewModel
+) {
     val searchQuery = remember { mutableStateOf(TextFieldValue("")) }
-    val recipes = remember { mutableStateOf(emptyList<Recipe>()) }
-    val isLoading = remember { mutableStateOf(true) }
-    val isError = remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
-        try {
-            recipes.value = ApiClient.apiService.getRecipes()
-            isLoading.value = false
-        } catch (e: Exception) {
-            isError.value = true
-            isLoading.value = false
-        }
-    }
-    LazyColumn(
+
+    Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Header Section
-        item {
+
             Text(
                 text = "Discover Recipes",
                 style = MaterialTheme.typography.headlineMedium,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
-            SearchBar(searchQuery)
-        }
+            SearchBar(searchQuery, recipeViewModel)
 
-        // Categories Section
-        item {
             Text(
                 text = "Categories",
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(vertical = 16.dp)
             )
-            CategoriesRow(categories = listOf("All", "Breakfast", "Lunch", "Dinner", "Dessert"))
-        }
 
-        // Popular Recipes Section
-        item {
+            if (recipeViewModel.categoriesResponse.isEmpty())
+                recipeViewModel.getCategories()
+            CategoriesRow(recipeViewModel.categoriesResponse.map { it.name }, recipeViewModel)
+
+
             Text(
                 text = "Popular Recipes",
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(vertical = 16.dp)
             )
-        }
 
-        if (isLoading.value) {
-            item {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
-            }
-        } else if (isError.value) {
-            item {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(text = "Failed to load recipes", color = Color.Red)
-                }
-            }
-        } else {
-            items(recipes.value.size) { index ->
-                RecipeCard(
-                    recipeTitle = recipes.value[index].name,
-                    recipeImage = recipes.value[index].imageUrl,
-                    starRating = recipes.value[index].rating.toString(),
-                    prepTime = recipes.value[index].cookTime,
-                    onClick = {
-                        val context = LocalContext.current
-                        val intent = Intent(context, RecipeDetailActivity::class.java).apply {
-                            putExtra("recipeName", recipes.value[index].name)
-                            putExtra("recipeImage", recipes.value[index].imageUrl)
-                            putExtra("recipePrepTime", recipes.value[index].cookTime)
-                            putExtra("recipeRating", recipes.value[index].rating.toString())
-                            putExtra("recipeSteps", recipes.value[index].cookingInstructions)
-                        }
-                        context.startActivity(intent)
-                    }
-                )
-            }
+
+        RecipesList(recipes = recipeViewModel.recipesResponse, recipeViewModel = recipeViewModel)
+        if (recipeViewModel.recipesResponse.isEmpty())
+            recipeViewModel.getRecipes()
+
+        if (recipeViewModel.state == STATE.LOADING) {
+            CircularProgressIndicator(modifier = Modifier.padding(50.dp))
         }
     }
 }
 
 @Composable
-fun SearchBar(searchQuery: MutableState<TextFieldValue>) {
+fun RecipesList(recipes: List<Recipe>, recipeViewModel: RecipeViewModel) {
+    val scrollState = rememberLazyListState()
+    val isItemReachEndScroll by remember {
+        derivedStateOf {
+            scrollState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ==
+                    scrollState.layoutInfo.totalItemsCount - 1
+        }
+    }
+
+
+    LaunchedEffect(key1 = isItemReachEndScroll, block = {
+        recipeViewModel.getMoreRecipes()
+    })
+
+
+
+    LazyColumn(
+        state = scrollState,
+        modifier = Modifier.fillMaxSize()
+    ) {
+        items(recipes.size) { index ->
+            RecipeCard(
+                recipeTitle = recipes[index].name,
+                recipeImage = recipes[index].imageUrl,
+                starRating = recipes[index].rating.toString(),
+                prepTime = recipes[index].cookTime,
+            )
+        }
+    }
+}
+
+@Composable
+fun SearchBar(searchQuery: MutableState<TextFieldValue>, recipeViewModel: RecipeViewModel) {
+    var searchJob by remember { mutableStateOf<Job?>(null) }
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -147,7 +157,16 @@ fun SearchBar(searchQuery: MutableState<TextFieldValue>) {
     ) {
         BasicTextField(
             value = searchQuery.value,
-            onValueChange = { searchQuery.value = it },
+            onValueChange = { newValue ->
+                searchQuery.value = newValue
+                // Annuler la recherche précédente
+                searchJob?.cancel()
+                // Démarrer une nouvelle recherche avec un délai
+                searchJob = CoroutineScope(Dispatchers.Main).launch {
+                    delay(300) // Délai de 300ms pour éviter trop d'appels
+                    recipeViewModel.searchRecipes(name = newValue.text, category = "")
+                }
+            },
             modifier = Modifier.fillMaxWidth(),
             decorationBox = { innerTextField ->
                 if (searchQuery.value.text.isEmpty()) {
@@ -160,13 +179,15 @@ fun SearchBar(searchQuery: MutableState<TextFieldValue>) {
 }
 
 @Composable
-fun CategoriesRow(categories: List<String>) {
+fun CategoriesRow(categories: List<String>, recipeViewModel: RecipeViewModel) {
     LazyRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
         items(categories.size) { index ->
-            Chip(label = categories[index], onClick = { /* TODO: Handle category click */ })
+            Chip(label = categories[index], onClick = {
+                recipeViewModel.searchRecipes(name = "", category = categories[index])
+            })
         }
     }
 }
@@ -185,7 +206,7 @@ fun Chip(label: String, onClick: () -> Unit) {
 
 
 @Composable
-fun RecipeCard(recipeTitle: String, recipeImage: String, starRating: String, prepTime: String, onClick: @Composable () -> Unit) {
+fun RecipeCard(recipeTitle: String, recipeImage: String, starRating: String, prepTime: String) {
     val context = LocalContext.current
     Row(
         modifier = Modifier
